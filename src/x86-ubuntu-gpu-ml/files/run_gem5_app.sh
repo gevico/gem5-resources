@@ -2,7 +2,7 @@
 
 # Copyright (c) 2024 Advanced Micro Devices, Inc.
 # All rights reserved.
-# SPDX-License-Identifier: BSD 3-Clause
+# SPDX-License-Identifier: BSD-3-Clause
 
 # Read script from host and run it
 /sbin/m5 readfile > script.sh

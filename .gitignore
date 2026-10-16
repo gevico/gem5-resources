@@ -18,3 +18,11 @@ src/x86-ubuntu-gpu-ml/files/m5
 src/x86-ubuntu-gpu-ml/vmlinux-*
 src/x86-ubuntu-gpu-ml/disk-image/
 src/x86-ubuntu-gpu-ml/packer_cache/
+src/x86-ubuntu-gpu-ml/.packer-tools/
+src/x86-ubuntu-gpu-ml/p/
+src/x86-ubuntu-gpu-ml/image-packages.tsv
+src/x86-ubuntu-gpu-ml/kernel-release
+src/x86-ubuntu-gpu-ml/python-packages.json
+src/x86-ubuntu-gpu-ml/amdgpu-module.txt
+src/x86-ubuntu-gpu-ml/hipcc-version.txt
+src/x86-ubuntu-gpu-ml/os-release

@@ -1,12 +1,33 @@
 #!/bin/bash
-set -ex
+set -Eeuxo pipefail
+
+mkdir -p /home/gem5/build-tmp
+export TMPDIR=/home/gem5/build-tmp
+export DEBIAN_FRONTEND=noninteractive
+
+show_dkms_logs() {
+    status=$?
+    trap - ERR
+    if [ -d /var/lib/dkms ]; then
+        find /var/lib/dkms -type f -name make.log -print \
+            -exec cat {} \; >&2 || true
+    fi
+    exit "$status"
+}
+trap show_dkms_logs ERR
+
+: "${KERNEL:?Packer must select the guest kernel}"
+if [ "$(uname -r)" != "$KERNEL" ]; then
+    echo "Guest booted $(uname -r), expected $KERNEL" >&2
+    exit 1
+fi
 
 # Copyright (c) 2024 The Regents of the University of California.
-# SPDX-License-Identifier: BSD 3-Clause
+# SPDX-License-Identifier: BSD-3-Clause
 
 # Copyright (c) 2024 Advanced Micro Devices, Inc.
 # All rights reserved.
-# SPDX-License-Identifier: BSD 3-Clause
+# SPDX-License-Identifier: BSD-3-Clause
 
 # Installing the packages in this script instead of the user-data
 # file dueing ubuntu autoinstall. The reason is that sometimes
@@ -17,6 +38,8 @@ apt-get install -y scons
 apt-get install -y git
 apt-get install -y vim
 apt-get install -y build-essential
+apt-get install -y "linux-image-${KERNEL}" "linux-headers-${KERNEL}" \
+    "linux-modules-extra-${KERNEL}"
 
 # Remove the motd
 rm /etc/update-motd.d/*
@@ -88,23 +111,28 @@ sudo chmod 777 /root/roms
 
 # File describing the hardware topology of the GPU. Used starting with MI300X.
 # Change permission so packer can copy here after disk build.
+sudo mkdir -p /usr/lib/firmware/amdgpu
 sudo touch /usr/lib/firmware/amdgpu/ip_discovery.bin
 sudo chmod 777 /usr/lib/firmware/amdgpu/ip_discovery.bin
 
 
-# Install a known-working version of Linux as this might change after stable
-# release. Install this after DKMS so they are rebuilt.
-KERNEL=6.8.0-124-generic
-
-sudo apt -y install "linux-image-${KERNEL}"
-sudo apt -y install "linux-headers-${KERNEL}" "linux-modules-extra-${KERNEL}"
-
 echo "Extracting linux kernel"
 sudo bash -c "/usr/src/linux-headers-${KERNEL}/scripts/extract-vmlinux /boot/vmlinuz-${KERNEL} > /home/gem5/vmlinux-gpu-ml"
+printf '%s\n' "$KERNEL" > /home/gem5/kernel-release
+modinfo -k "$KERNEL" amdgpu
+case "$(modinfo -k "$KERNEL" -n amdgpu)" in
+    */updates/dkms/amdgpu.ko*) ;;
+    *) echo "The selected kernel has no DKMS amdgpu module" >&2; exit 1 ;;
+esac
+case "$(modinfo -k "$KERNEL" -F vermagic amdgpu)" in
+    "$KERNEL "*) ;;
+    *) echo "The DKMS module does not match the selected kernel" >&2; exit 1 ;;
+esac
+modinfo -k "$KERNEL" amdgpu > /home/gem5/amdgpu-module.txt
 
 # Build the gem5 Linux module containing symbols missing due to outdated ACPI support in gem5
 pushd /home/gem5
-make -C /lib/modules/${KERNEL}/build M=${PWD}
+make -C "/lib/modules/${KERNEL}/build" M="${PWD}"
 if [ ! -f ./gem5_wmi.ko ]; then
     echo "gem5_wmi module did not appear to build correctly. This disk will not be usable."
     echo "Please post an issue at https://github.com/gem5/gem5/issues with this output log."
@@ -148,5 +176,13 @@ mv /home/gem5/cosim-gpu-setup.sh /usr/local/bin/cosim-gpu-setup.sh
 mv /home/gem5/cosim-gpu-setup.service /lib/systemd/system/
 systemctl daemon-reload
 systemctl enable cosim-gpu-setup.service
+systemd-analyze verify /lib/systemd/system/cosim-gpu-setup.service
 
 echo -e "\n/home/gem5/run_gem5_app.sh\n" >> /root/.bashrc
+
+dpkg-query -W -f='${Package}\t${Version}\n' > /home/gem5/image-packages.tsv
+python3 -m pip list --format=json > /home/gem5/python-packages.json
+/opt/rocm/bin/hipcc --version > /home/gem5/hipcc-version.txt
+apt-get clean
+rm -rf /root/.cache/pip
+fstrim -av

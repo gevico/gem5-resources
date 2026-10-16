@@ -1,12 +1,12 @@
 # Copyright (c) 2024 Advanced Micro Devices, Inc.
 # All rights reserved.
-# SPDX-License-Identifier: BSD 3-Clause
+# SPDX-License-Identifier: BSD-3-Clause
 
 packer {
   required_plugins {
     qemu = {
       source  = "github.com/hashicorp/qemu"
-      version = "~> 1"
+      version = "= 1.1.7"
     }
   }
 }
@@ -31,6 +31,37 @@ variable "qemu_path" {
   default = "/usr/bin/qemu-system-x86_64"
 }
 
+variable "kernel_release" {
+  type    = string
+  default = "6.8.0-124-generic"
+}
+
+locals {
+  autoinstall = merge(yamldecode(file("http/user-data")).autoinstall, {
+    kernel = { package = "linux-image-${var.kernel_release}" }
+  })
+}
+
+variable "disk_format" {
+  type    = string
+  default = "raw"
+}
+
+variable "builder_cpus" {
+  type    = number
+  default = 4
+}
+
+variable "builder_memory" {
+  type    = number
+  default = 8192
+}
+
+variable "http_proxy" {
+  type    = string
+  default = ""
+}
+
 source "qemu" "initialize" {
   accelerator      = "kvm"
   boot_command     = ["e<wait>",
@@ -39,14 +70,19 @@ source "qemu" "initialize" {
                       "autoinstall  ds=nocloud-net\\;s=http://{{ .HTTPIP }}:{{ .HTTPPort }}/ ---<wait>",
                       "<f10><wait>"
                     ]
-  cpus             = "4"
+  cpus             = var.builder_cpus
   disk_size        = "56000"
-  format           = "raw"
+  format           = var.disk_format
+  disk_compression = var.disk_format == "qcow2"
+  disk_discard     = "unmap"
   headless         = "true"
-  http_directory   = "http"
+  http_content = {
+    "/meta-data" = file("http/meta-data")
+    "/user-data" = "#cloud-config\n${yamlencode({ autoinstall = local.autoinstall })}"
+  }
   iso_checksum     = "sha256:d6dab0c3a657988501b4bd76f1297c053df710e06e0c3aece60dead24f270b4d"
-  iso_urls         = ["https://releases.ubuntu.com/24.04.2/ubuntu-24.04.2-live-server-amd64.iso"]
-  memory           = "8192"
+  iso_urls         = ["https://old-releases.ubuntu.com/releases/24.04.2/ubuntu-24.04.2-live-server-amd64.iso"]
+  memory           = var.builder_memory
   output_directory = "disk-image"
   qemu_binary      = "${var.qemu_path}"
   qemuargs         = [["-cpu", "host"], ["-display", "none"]]
@@ -102,6 +138,12 @@ build {
   }
 
   provisioner "shell" {
+    remote_folder   = "/home/gem5"
+    environment_vars = [
+      "http_proxy=${var.http_proxy}",
+      "https_proxy=${var.http_proxy}",
+      "KERNEL=${var.kernel_release}"
+    ]
     execute_command = "echo '${var.ssh_password}' | {{ .Vars }} sudo -E -S bash '{{ .Path }}'"
     scripts         = ["scripts/rocm-install.sh"]
   }
@@ -129,6 +171,42 @@ build {
   provisioner "file" {
     source      = "/home/gem5/vmlinux-gpu-ml"
     destination = "vmlinux-rocm70"
+    direction   = "download"
+  }
+
+  provisioner "file" {
+    source      = "/home/gem5/image-packages.tsv"
+    destination = "image-packages.tsv"
+    direction   = "download"
+  }
+
+  provisioner "file" {
+    source      = "/home/gem5/kernel-release"
+    destination = "kernel-release"
+    direction   = "download"
+  }
+
+  provisioner "file" {
+    source      = "/home/gem5/python-packages.json"
+    destination = "python-packages.json"
+    direction   = "download"
+  }
+
+  provisioner "file" {
+    source      = "/home/gem5/amdgpu-module.txt"
+    destination = "amdgpu-module.txt"
+    direction   = "download"
+  }
+
+  provisioner "file" {
+    source      = "/home/gem5/hipcc-version.txt"
+    destination = "hipcc-version.txt"
+    direction   = "download"
+  }
+
+  provisioner "file" {
+    source      = "/etc/os-release"
+    destination = "os-release"
     direction   = "download"
   }
 }
