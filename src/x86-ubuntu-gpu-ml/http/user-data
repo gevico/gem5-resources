@@ -19,8 +19,6 @@ autoinstall:
     password: $6$zospIH4bRUKpimF/$2WnsaAYUp/DQ3Sdxumlek6omd43ImAGtpJgS0PIdM.zNl8qyNsviZER3kf6IqBXGZqZ/wjeGjkB.t8XlAVRQu.
     realname: gem5
     username: gem5
-  kernel:
-    package: linux-generic
   keyboard:
     layout: us
     toggle: null

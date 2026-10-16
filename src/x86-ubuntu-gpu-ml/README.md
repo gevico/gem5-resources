@@ -6,22 +6,28 @@ authors: ["Matthew Poremba"]
 ---
 
 This disk image is designed to work with the example GPU full system (GPUFS) configurations located in the gem5 repository in configs/example/gpufs/.
-The disk installs Ubuntu 24.04, the officially supported Ubuntu 24.04 version of ROCm 6.4, and the popular machine learning (ML) framework PyTorch.
+The disk installs Ubuntu 24.04, ROCm 7.0 and PyTorch.
 Some Ubuntu configuration files are modified to automatically login as root user and load an application from the host into gem5.
 
 ## Major Contents
 
 The disk image starts with a minimal Ubuntu server plus essential packages to build basic applications.
-For GPU applications, the ROCm 6.4 version of the amdgpu DKMS driver and the `rocm` package are installed.
-The DKMS driver builds against the kernel that is running at the time of install.
+For GPU applications, the ROCm 7.0 repository's amdgpu DKMS driver and `rocm`
+package are installed. The driver is built for Linux 6.8.0-124-generic,
+which is the kernel extracted for simulation. The Packer `kernel_release`
+variable selects the same kernel for Ubuntu installation, its first boot,
+headers, DKMS compilation and export. Failed provisioning includes complete
+DKMS `make.log` files in the build output.
 Therefore, the kernel extracted from this disk image *must* be paired with this disk image when running gem5.
 
 Details of the disk contents are:
-- [ROCm](https://rocm.docs.amd.com/) 6.4: The singular `rocm` package in this install includes:
+- [ROCm](https://rocm.docs.amd.com/) 7.0: The `rocm` package includes:
     - [HIP](https://github.com/ROCm/HIP): hipcc LLVM compiler and HIP versions of roc libraries.
     - roc Libraries: rocBLAS, rocSPARSE, rocgdb, etc.
     - MI libraries: MIOpen, MIGraphX, etc.
-- [PyTorch](https://pytorch.org/) 2.7.0: PyTorch is a machine learning library based on the Torch library
+- [PyTorch](https://pytorch.org/) from the ROCm 6.0 wheel channel selected by
+  the installation script. Installed Debian versions are recorded in
+  `image-packages.tsv` alongside the image.
 
 ## Disk Image with QEMU
 
@@ -42,8 +48,8 @@ Modify the paths as needed if that is not true:
 
 ```sh
 scons build/VEGA_X86/gem5.opt -j`nproc`
-./build/VEGA_X86/gem5.opt configs/example/gpufs/mi300.py --disk-image gem5-resources/src/x86-ubuntu-gpu-ml/disk-image/x86-ubuntu-gpu-ml --kernel gem5-resources/src/x86-ubuntu-gpu-ml/vmlinux-gpu-ml --app ./pytorch_test.py
-./build/VEGA_X86/gem5.opt configs/example/gem5_library/x86-mi300x-gpu.py --image gem5-resources/src/x86-ubuntu-gpu-ml/disk-image/x86-ubuntu-gpu-ml --kernel gem5-resources/src/x86-ubuntu-gpu-ml/vmlinux-gpu-ml --app ./pytorch_test.py
+./build/VEGA_X86/gem5.opt configs/example/gpufs/mi300.py --disk-image gem5-resources/src/x86-ubuntu-gpu-ml/disk-image/x86-ubuntu-rocm70 --kernel gem5-resources/src/x86-ubuntu-gpu-ml/vmlinux-rocm70 --app ./pytorch_test.py
+./build/VEGA_X86/gem5.opt configs/example/gem5_library/x86-mi300x-gpu.py --image gem5-resources/src/x86-ubuntu-gpu-ml/disk-image/x86-ubuntu-rocm70 --kernel gem5-resources/src/x86-ubuntu-gpu-ml/vmlinux-rocm70 --app ./pytorch_test.py
 ```
 
 The contents of `pytorch_test.py` are:
